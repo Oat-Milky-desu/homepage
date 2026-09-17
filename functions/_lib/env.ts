@@ -37,4 +37,14 @@ export interface ApiOptions {
   devOrigin?: string;
 }
 
-export const DEFAULT_PBKDF2_ITERATIONS = 150_000;
+/**
+ * 新写入密码哈希的默认 PBKDF2 迭代次数。
+ *
+ * 托管版 Cloudflare Workers 的 WebCrypto 对 PBKDF2 迭代次数有 100000 的硬上限：
+ * 超过时 deriveBits 会在线上抛出
+ * `Pbkdf2 failed: iteration counts above 100000 are not supported`，
+ * 首次初始化 / 登录 / 改密都会返回 500（https://github.com/cloudflare/workerd/issues/1346）。
+ * 本地 workerd / Miniflare 不强制执行该上限，因此本地能跑通的更高值仍可能在线上失败，
+ * 这里必须保持不超过 100000。哈希串自带迭代次数，历史哈希仍按其记录的开销校验。
+ */
+export const DEFAULT_PBKDF2_ITERATIONS = 100_000;

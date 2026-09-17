@@ -6,6 +6,14 @@ import type { ApiErrorBody, ContentPayload, NavGroup, NavLink } from '../../src/
 export const ORIGIN = 'https://nav.example.com';
 export const HOST = 'nav.example.com';
 export const TEST_ITERATIONS = 1000;
+
+export interface HarnessOptions {
+  /**
+   * 显式传入 `undefined` 时使用生产默认迭代次数（`DEFAULT_PBKDF2_ITERATIONS`）；
+   * 不传该字段时使用 `TEST_ITERATIONS` 以保持测试速度。
+   */
+  pbkdf2Iterations?: number;
+}
 export const TEST_USERNAME = 'admin';
 export const TEST_PASSWORD = 'Str0ng-Pass!2026';
 export const TEST_INIT_SECRET = 'test-init-secret';
@@ -45,9 +53,12 @@ export interface Harness {
 
 const DEFAULT_NOW = Date.parse('2026-03-01T08:00:00.000Z');
 
-export function createHarness(): Harness {
+export function createHarness(options: HarnessOptions = {}): Harness {
   let currentNow = DEFAULT_NOW;
-  const handler = createApiHandler({ now: () => currentNow, pbkdf2Iterations: TEST_ITERATIONS });
+  const pbkdf2Iterations = Object.prototype.hasOwnProperty.call(options, 'pbkdf2Iterations')
+    ? options.pbkdf2Iterations
+    : TEST_ITERATIONS;
+  const handler = createApiHandler({ now: () => currentNow, pbkdf2Iterations });
   let cookie: string | null = null;
   let csrfToken: string | null = null;
 
