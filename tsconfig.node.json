@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "baseUrl": "."
+  },
+  "include": ["vite.config.ts", "vitest.config.ts", "vitest.workers.config.ts"]
+}

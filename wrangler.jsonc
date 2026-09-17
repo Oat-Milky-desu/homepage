@@ -1,0 +1,18 @@
+{
+  // Cloudflare Pages 项目配置（单一配置来源，不再保留 wrangler.toml）
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xingyu-nav",
+  // 与已安装 workerd 支持的 compatibility date 保持一致
+  "compatibility_date": "2026-09-15",
+  "pages_build_output_dir": "dist",
+  // D1 数据库绑定：本地开发自动使用 .wrangler/state 下的 SQLite。
+  // 部署前执行 `npx wrangler d1 create xingyu-nav`，并把 database_id 替换为真实 ID。
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "xingyu-nav",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

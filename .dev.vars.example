@@ -1,0 +1,17 @@
+# 本地开发环境变量示例
+# 复制为 .dev.vars 后填写（.dev.vars 已被 .gitignore 忽略，不会被提交）
+# 部署到 Cloudflare Pages 时，请使用加密变量：
+#   npx wrangler pages secret put INIT_SECRET --project-name <你的项目名>
+# 或在 Cloudflare Dashboard → Pages → 项目 → Settings → Environment variables 中配置。
+
+# 初始化密钥：仅在 /setup 首次初始化时使用，至少 16 位随机字符串。
+# 初始化完成后该值不会再被使用，但建议保留以备将来重新部署。
+INIT_SECRET="change-me-to-a-long-random-string"
+
+# 可选：强制会话 Cookie 带上 Secure（默认在 https 下自动启用；本地 http 调试无需设置）
+# FORCE_SECURE_COOKIE="false"
+
+# 可选：本地开发时额外允许的同源地址（完整 origin）。
+# 默认情况下 Vite 开发服务器（默认 http://localhost:5173）通过 Host 头即可通过同源校验，
+# 仅当你的开发地址较特殊时才需要显式配置；生产环境不要设置。
+# DEV_ORIGIN="http://localhost:5173"
