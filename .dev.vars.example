@@ -1,12 +1,18 @@
 # 本地开发环境变量示例
-# 复制为 .dev.vars 后填写（.dev.vars 已被 .gitignore 忽略，不会被提交）
-# 部署到 Cloudflare Pages 时，请使用加密变量：
-#   npx wrangler pages secret put INIT_SECRET --project-name <你的项目名>
-# 或在 Cloudflare Dashboard → Pages → 项目 → Settings → Environment variables 中配置。
+# 复制为 .dev.vars 后填写（.dev.vars 已被 .gitignore 忽略，不会被提交）。
+#
+# 部署方式：
+# - Workers（含 Deploy to Cloudflare 按钮）：按钮会把本文件中出现的键作为部署输入，
+#   要求填写 INIT_SECRET；也可以稍后用 `npx wrangler secret put INIT_SECRET` 配置。
+# - Cloudflare Pages：使用加密变量：
+#     npx wrangler pages secret put INIT_SECRET --project-name <你的项目名>
+#   或在 Cloudflare Dashboard → Workers & Pages → 你的 Pages 项目 → Settings → Variables and Secrets 中配置。
+#
+# 注意：请勿在此处填写真实密钥；本文件只用于声明必须配置的变量名。
 
-# 初始化密钥：仅在 /setup 首次初始化时使用，至少 16 位随机字符串。
-# 初始化完成后该值不会再被使用，但建议保留以备将来重新部署。
-INIT_SECRET="change-me-to-a-long-random-string"
+# 初始化密钥（必填）：仅在 /setup 首次初始化时使用，至少 16 位随机字符串。
+# 这里刻意留空：仓库不提供任何可用的默认值，未配置时服务端会拒绝初始化。
+INIT_SECRET=
 
 # 可选：强制会话 Cookie 带上 Secure（默认在 https 下自动启用；本地 http 调试无需设置）
 # FORCE_SECURE_COOKIE="false"

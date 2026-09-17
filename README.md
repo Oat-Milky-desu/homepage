@@ -1,6 +1,9 @@
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2FOat-Milky-desu%2Fhomepage)
+
 # 星屿导航（Xingyu Nav）
 
-一个**纯私有**的个人导航主页：Vue 3 + TypeScript + Vite 前端，Cloudflare Pages Functions 提供 API，Cloudflare D1 负责持久化。
+一个**纯私有**的个人导航主页：Vue 3 + TypeScript + Vite 前端，Cloudflare Workers（或 Cloudflare Pages Functions）提供 API，Cloudflare D1 负责持久化。
+仓库同时提供官方 **Deploy to Cloudflare** 一键按钮（官方仅支持 Workers）与保留的 **Pages 手动部署**方式。
 整体视觉参考 Sun-Panel 的壁纸 + 毛玻璃卡片风格，但代码与样式均为原创实现；没有注册功能，整站只有一位管理员。
 
 - 首页：实时日期/时钟、站内搜索 + 百度 / Google / Bing 外部搜索、分组快捷跳转、分组折叠、响应式卡片网格；页眉提供「日间 / 夜间」一键快捷切换（与 `/admin` 外观设置同源，保存到云端并在多设备同步）
@@ -18,23 +21,25 @@
 浏览器 (Vue SPA)
    │  fetch /api/*（同源、Cookie 会话、X-CSRF-Token）
    ▼
-Cloudflare Pages Functions  →  functions/api/[[path]].ts
-   │  统一路由与中间件：functions/_lib 中的 router / http / auth
+Cloudflare Workers: worker/index.ts      （或 Pages Functions: functions/api/[[path]].ts）
+   │  两者复用同一份统一路由与中间件：functions/_lib 中的 router / http / auth
    ▼
-Cloudflare D1 (SQLite)      →  migrations/*.sql
+Cloudflare D1 (SQLite)                   →  migrations/*.sql
 ```
 
 | 目录 | 说明 |
 | --- | --- |
 | `src/` | 前端源码（视图、组件、状态仓库、共享校验与类型） |
 | `src/shared/` | 前后端共享的纯 TS 模块：类型、校验、设置、备份格式、图标库、URL 工具、容量上限 |
-| `functions/api/[[path]].ts` | Pages Functions 唯一入口，`/api/*` 全部由它分发 |
+| `worker/index.ts` | Workers 入口：精确匹配 `/api` 与 `/api/*` 并交给共享路由，其余请求原样委派给静态资源绑定 `ASSETS` |
+| `functions/api/[[path]].ts` | Pages Functions 入口：与 Worker 共用同一份路由，`/api/*` 全部由它分发 |
 | `functions/_lib/` | 服务端模块：路由、HTTP 工具、会话与限流、加密、D1 访问层、批量写入、各类 handler |
-| `migrations/` | D1 迁移 SQL（`0001_init.sql`、`0002_validation_guard.sql`、`0003_named_guards.sql`） |
+| `migrations/` | D1 迁移 SQL（`0001_init.sql`、`0002_validation_guard.sql`、`0003_named_guards.sql`、`0004_content_budget_guard.sql`） |
 | `tests/api/` | 在 workerd 中运行的集成测试（真实 Miniflare D1） |
 | `tests/unit/` | jsdom 环境下的前端单元测试（书签解析、校验、URL、备份格式、会话状态、外观变量） |
 | `dist/` | `npm run build` 产物（已被 gitignore） |
-| `wrangler.jsonc` | 唯一的 Cloudflare 配置来源（Pages 输出目录、D1 绑定、compatibility date） |
+| `wrangler.jsonc` | Workers 配置（根目录）：`main`、静态资源与 SPA 回退、`/api` 优先路由、D1 绑定、compatibility date；Deploy to Cloudflare 按钮读取此文件 |
+| `wrangler.pages.jsonc` | Pages 配置：`pages_build_output_dir`、D1 绑定；供 Pages Git 集成与 Pages 项目配置参考 |
 
 ### 数据模型
 
@@ -70,14 +75,23 @@ cp .dev.vars.example .dev.vars      # Windows: copy .dev.vars.example .dev.vars
 # 3) 初始化本地 D1 并应用迁移（数据保存在 .wrangler/state，已被忽略）
 npm run db:migrate:local
 
-# 4a) 全栈预览（推荐）：构建前端 + 启动 Pages Functions + 本地 D1
+# 4a) Pages 形态全栈预览（保留）：构建前端 + 启动 Pages Functions + 本地 D1
 npm run preview            # http://127.0.0.1:8788
 
 # 4b) 或者分开跑，获得前端热更新
 npm run build              # 先生成 dist（wrangler pages dev 需要它作为静态资源目录）
 npm run dev:api            # 终端 A：API + 本地 D1，端口 8788
 npm run dev                # 终端 B：Vite 开发服务器，端口 5173，/api 已代理到 8788
+
+# 4c) Workers 形态本地预览（与一键按钮部署的运行时一致）
+npm run preview:worker     # 构建前端 + wrangler dev，默认 http://127.0.0.1:8787
+
+# 需要 Workers 运行时下的前端热更新时：
+#   npm run dev:worker      # 终端 A：wrangler dev，端口 8788（与 Vite 的 /api 代理一致）
+#   npm run dev             # 终端 B：Vite 开发服务器，端口 5173
 ```
+
+Pages 与 Workers 两种本地预览都读取根目录 `wrangler.jsonc` 的 D1 绑定，共享 `.wrangler/state` 下的同一份本地数据，因此 `npm run db:migrate:local` 只需执行一次。
 
 首次打开页面会被引导到 `/setup`，需要填写三件事：
 
@@ -89,68 +103,130 @@ npm run dev                # 终端 B：Vite 开发服务器，端口 5173，/ap
 
 ---
 
-## 3. 部署到 Cloudflare Pages
+## 3. 部署
 
-> 仓库包含 `wrangler.jsonc`（`pages_build_output_dir = "dist"`、D1 绑定占位符、`compatibility_date = "2026-09-15"`）。**无需真实部署即可完成本地验证**，下面步骤供上线时使用。
+> 官方 **Deploy to Cloudflare** 按钮目前只支持 Workers 应用，不支持 Pages（官方限制，详见 [Deploy to Cloudflare buttons](https://developers.cloudflare.com/workers/platform/deploy-buttons/)；该文档同时说明了按钮如何自动创建 D1、发现 `.dev.vars.example` 中的密钥并使用 `build` / `deploy` 脚本）。因此：
+> - README 顶部的一键按钮部署的是 **Workers** 版本；
+> - 仓库同时保留 Pages 配置（`wrangler.pages.jsonc`）与 `npm run deploy:pages` 手动部署方式。
+>
+> 本仓库只保证配置符合官方要求，**不代表已完成真实云端部署验证**；请按下文在你自己的 Cloudflare 账号中操作。
 
-### 3.1 创建 D1 数据库
+### 3.1 一键部署到 Cloudflare Workers（官方 Deploy to Cloudflare 按钮）
 
-```bash
-npx wrangler d1 create xingyu-nav
-```
+前置条件：
 
-把输出中的 `database_id` 填入 `wrangler.jsonc` 的 `d1_databases[0].database_id`（当前是占位 UUID）：
+1. 仓库是公开（public）的 GitHub / GitLab 仓库，且本文档与配置改动都已 **push** 到远端。Cloudflare 无法读取未推送的本地改动。
+2. 已有 Cloudflare 账号。点击按钮后需要登录 Cloudflare，并授权它访问你的 GitHub / GitLab 账号（Cloudflare 会把仓库克隆到你自己的账号下，后续可在那里继续开发）。
+3. Workers 免费计划即可运行本项目（D1 有免费额度）。
 
-```jsonc
-"d1_databases": [
-  {
-    "binding": "DB",
-    "database_name": "xingyu-nav",
-    "database_id": "真实数据库 ID",
-    "migrations_dir": "migrations"
-  }
-]
-```
+点击顶部按钮后，Cloudflare 会：
 
-### 3.2 应用远端迁移
-
-```bash
-npm run db:migrate:remote      # wrangler d1 migrations apply DB --remote
-```
-
-迁移是追加式的；已有数据库只需应用尚未执行的新迁移。
-
-### 3.3 配置初始化密钥（加密变量）
-
-```bash
-npx wrangler pages secret put INIT_SECRET --project-name <你的 Pages 项目名>
-# 生成随机密钥示例：node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
-```
-
-也可以在 Cloudflare Dashboard → Workers & Pages → 你的 Pages 项目 → Settings → Variables and Secrets 中添加 `INIT_SECRET`（类型选择 **Secret / 加密**）。
+1. 读取根目录 `wrangler.jsonc`，自动创建 D1 数据库并绑定为 `DB`，同时把真实 `database_id` 写回克隆仓库的配置（仓库里的占位 UUID 无需手动替换）。
+2. 从 `.dev.vars.example` 识别需要填写的密钥：`INIT_SECRET`。请填入一段 **至少 16 位** 的随机字符串（例如 `openssl rand -hex 32` 的输出）。部署配置页同时会显示 `package.json` → `cloudflare.bindings` 中为 `DB` / `INIT_SECRET` 提供的说明。
+3. 用 `npm run build` 构建前端，用 `npm run deploy` 部署：先执行远端 D1 迁移（`wrangler d1 migrations apply DB --remote`），再执行 `wrangler deploy`。迁移命令引用的是**绑定名** `DB`，因此即使数据库被起了别的名字也能正确执行。
+4. 部署完成后访问站点，会自动跳转 `/setup`，填写 `INIT_SECRET`、管理员用户名与密码完成首次初始化。
 
 `INIT_SECRET` 只在 `/api/setup` 首次初始化时参与校验，绝不会进入前端构建产物，也不会以 `VITE_` 前缀暴露。
 
-### 3.4 部署
-
-**方式 A：连接 Git 仓库（推荐）**
-
-- Build command：`npm run build`
-- Build output directory：`dist`（`wrangler.jsonc` 中已声明）
-- Pages 会自动发现并打包 `functions/` 目录
-
-**方式 B：命令行**
+### 3.2 手动部署到 Cloudflare Workers
 
 ```bash
-npm run build
+# 1) 创建 D1 数据库，并把输出中的 database_id 填入 wrangler.jsonc 的 d1_databases[0].database_id
+npx wrangler d1 create xingyu-nav
+
+# 2) 应用远端迁移（迁移是追加式的，已有数据库只会执行未应用的迁移）
+npm run db:migrate:remote      # = wrangler d1 migrations apply DB --remote
+
+# 3) 配置初始化密钥
+npx wrangler secret put INIT_SECRET
+# 生成随机密钥示例：node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+
+# 4) 构建 + 远端迁移 + 部署
+npm run deploy                 # = npm run build && npm run db:migrate:remote && wrangler deploy
+```
+
+也可以在 Cloudflare Dashboard → Workers & Pages → 你的 Worker → Settings → Variables and Secrets 中添加 `INIT_SECRET`（类型选择 **Secret / 加密**）。
+
+### 3.3 保留：Cloudflare Pages 手动部署
+
+已有 Pages 项目可以继续使用；新建 Pages 项目也按本节操作。
+
+**先分清配置的作用范围**
+
+- `wrangler pages dev` / `wrangler pages deploy` 只读取项目根目录配置且**不接受 `--config`**。`wrangler.pages.jsonc` 不会被这两个命令自动读取，它只在“方式 B”中通过构建命令覆盖到根目录后才生效。
+- **本地**：`npm run preview` / `npm run dev:api` 读取根目录 `wrangler.jsonc`（当前是 Workers 配置）里的 D1 绑定，按绑定名 `DB` 使用本地 SQLite；它与 Workers 本地预览共享 `.wrangler/state` 的同一份数据，所以 `npm run db:migrate:local` 只需执行一次。
+- **远端**：根目录 `wrangler.jsonc` 没有 `pages_build_output_dir`，不构成 Pages 项目配置，因此 `wrangler pages deploy` **不会**从中读取 D1 绑定；Pages 生产环境的绑定要么来自 Dashboard（方式 A/C），要么来自构建时覆盖到根目录的 `wrangler.pages.jsonc`（方式 B）。
+
+**新项目前置步骤（方式 A/C 的 Dashboard 绑定，推荐）**
+
+> 只在 Pages Dashboard 添加 D1 绑定**既不会创建数据库，也不会建表**。先完成：
+
+```bash
+# 1) 创建 D1 数据库，记录输出中的 database_id
+npx wrangler d1 create xingyu-nav
+
+# 2) 把真实 database_id 填入根目录 wrangler.jsonc 的 d1_databases[0].database_id，
+#    再对同一个数据库应用远端迁移；命令按根配置定位数据库，按绑定名 DB 执行 migrations/
+npm run db:migrate:remote      # = wrangler d1 migrations apply DB --remote
+
+# 3) 在 Pages 项目 → Settings → Bindings 添加 D1 绑定：变量名 DB，选择上一步创建的同一个数据库
+
+# 4) 配置初始化密钥（加密变量）
+npx wrangler pages secret put INIT_SECRET --project-name <你的 Pages 项目名>
+#    也可在 Dashboard → Settings → Variables and Secrets 添加，类型选择 Secret
+```
+
+**方式 A：连接 Git 仓库（Dashboard 设置）**
+
+- Build command：`npm run build`
+- Build output directory：`dist`
+- Pages 会自动发现并打包 `functions/` 目录
+- D1 绑定与 `INIT_SECRET` 按上面的前置步骤在 Dashboard 配置
+
+这是最简单的 Pages 方式：各绑定的唯一来源是 Dashboard，仓库中的 `wrangler.pages.jsonc` 仅作参考/模板，不参与部署。
+
+**方式 B：让构建使用仓库里的 Pages 配置（可选，Git 集成）**
+
+希望 Pages 项目配置随仓库版本化时：
+
+```bash
+# 1) 把真实 database_id 填入 wrangler.pages.jsonc 的 d1_databases[0].database_id
+#    （若需复用现有数据，填与根目录 wrangler.jsonc 相同的数据库）
+
+# 2) 用 Pages 配置应用远端迁移（D1 命令支持 --config）
+npx wrangler d1 migrations apply DB --remote --config wrangler.pages.jsonc
+
+# 3) Git 项目 Build command 改为（Cloudflare 的 Linux 构建镜像提供 cp）：
+cp wrangler.pages.jsonc wrangler.jsonc && npm run build
+```
+
+一旦根目录出现带 `pages_build_output_dir` 的配置文件，该文件就是 Pages 项目配置（含 D1 绑定）的唯一来源，Dashboard 中对应的绑定**不会覆盖**它；要改绑定就改 `wrangler.pages.jsonc` 并重新部署。
+
+**方式 C：命令行**
+
+```bash
+npm run deploy:pages           # = npm run build && wrangler pages deploy dist
+# 首次使用请先在 Dashboard 创建 Pages 项目，或显式指定项目名：
 npx wrangler pages deploy dist --project-name <你的 Pages 项目名>
 ```
 
-部署完成后访问站点，用 `INIT_SECRET` 完成初始化。
+命令行部署同样使用 Dashboard 中的 D1 绑定与 `INIT_SECRET`（即按前置步骤配置好的那份）。本地 Pages 预览仍然可用：`npm run preview` / `npm run dev:api`（见第 2 节）。
+
+### 3.4 从 Pages 迁移到 Workers：数据不会自动搬家
+
+Deploy to Cloudflare 按钮创建的是**全新的 D1 数据库**，不会自动搬迁旧 Pages 项目的数据。可选：
+
+1. **复用现有数据库（需谨慎）**：把 Workers 根目录 `wrangler.jsonc` 的 `d1_databases[0].database_id` 改成 Pages 项目正在使用的数据库 ID，然后重新执行 `npm run deploy`。D1 绑定以仓库配置为准，只在 Dashboard 改绑定会在下一次 `wrangler deploy` 时被覆盖，因此必须落回配置文件。两个部署会读写同一份数据，迁移只追加、不清空；切换前请先导出备份，并避免两个站点同时写入。
+2. **备份 / 恢复（推荐）**：在旧 Pages 站点导出 JSON 备份 → 先完成 Workers 站点的首次初始化（部署后用 `INIT_SECRET` 走完 `/setup`；备份不包含密码与会话）→ 在新站点 `/admin` → 备份与恢复中恢复。恢复是事务内的原子替换，失败不会留下半截数据。
+
+现有 Pages 部署不会被按钮修改，可以继续使用。
 
 ### 3.5 自定义域名与 HTTPS
 
-在 Pages 项目 → Custom domains 绑定域名。会话 Cookie 在 HTTPS 下自动带上 `Secure`；本地 http 调试时（`wrangler pages dev` 的 `localhost` / `127.0.0.1`）不带 `Secure`，也可以显式设置 `FORCE_SECURE_COOKIE=true/false` 覆盖。
+- Workers：在 Worker → Settings → Domains & Routes 绑定自定义域名。
+- Pages：在 Pages 项目 → Custom domains 绑定域名。
+
+会话 Cookie 在 HTTPS 下自动带上 `Secure`；本地 http 调试时（`wrangler dev` / `wrangler pages dev` 的 `localhost` / `127.0.0.1`）不带 `Secure`，也可以显式设置 `FORCE_SECURE_COOKIE=true/false` 覆盖。
 
 ---
 
@@ -245,14 +321,19 @@ npx wrangler d1 execute DB --remote \
 ## 8. 开发命令与验证
 
 ```bash
-npm run typecheck     # 前端(vue-tsc) + 服务端(tsc, workers 类型) + 配置(tsc, node 类型)
+npm run typecheck     # 前端(vue-tsc) + 服务端(tsc, workers 类型, 含 worker/ 适配层) + 配置(tsc, node 类型)
 npm run lint          # ESLint flat config，含 Vue 规则
 npm run build         # 前端生产构建
-npm run build:functions   # 单独编译 Pages Functions 到 .tmp/functions-build（验证打包无误）
-npm run types         # 根据 wrangler.jsonc 生成绑定类型到 .tmp/worker-configuration.d.ts
+npm run build:functions   # 单独编译 Pages Functions 到 .tmp/functions-build（验证 Pages 打包无误）
+npm run types         # 根据 wrangler.jsonc 生成 Worker 绑定类型到 .tmp/worker-configuration.d.ts
+npm run preview:worker    # Workers 本地预览（wrangler dev，含 dist 静态资源与 /api 路由）
 npm test              # 单元测试 + workerd 集成测试
 npm run test:unit     # jsdom：书签解析、校验、URL、备份、首页交互、路由守卫、会话状态、外观变量
-npm run test:api      # workerd + 真实 Miniflare D1：认证、并发、限流、CRUD、批量写入、备份、导入
+npm run test:api      # workerd + 真实 Miniflare D1：认证、并发、限流、CRUD、批量写入、备份、导入、Worker 适配层
+npm run deploy        # Workers：构建 + 远端 D1 迁移 + wrangler deploy
+npm run deploy:pages  # Pages：构建 + wrangler pages deploy dist
+# Pages 配置（方式 B）的远端 D1 迁移：
+npx wrangler d1 migrations apply DB --remote --config wrangler.pages.jsonc
 ```
 
 可选的真实浏览器响应式检查（需要本机安装 Chrome 或 Edge）：
@@ -266,7 +347,7 @@ npm run check:browser -- --init-secret <与 .dev.vars 一致的 INIT_SECRET>   #
 
 该脚本通过 Chrome DevTools Protocol 完成初始化/登录、用界面创建分组与链接，并检查桌面 1440×900 与手机 390×844 视口下无横向溢出、卡片自适应宽度、管理页可用、主题切换生效以及控制台无未捕获错误，截图输出到 `.tmp/browser-check/`。
 
-集成测试直接调用与线上相同的 `functions/_lib/router.ts`，并使用真实的 D1（含 `CHECK`/外键约束与事务语义），覆盖：初始化只能一次、并发登录/初始化/改密限流、会话哈希存储、被动读取不续期而显式活动续期、登出与改密撤销（含当前设备）、同源/协议/端口校验、请求体上限、未知字段与危险协议拒绝、分组迁移与级联删除、跨分组排序的原子性与陈旧版本回滚、无变更请求的陈旧版本拒绝、600+ 条链接的批量导入 / 恢复 / 排序在 SQL 预算内完成、300 分组 / 5000 链接的备份往返、接近内容预算边界的多字节 Unicode 导出/恢复往返与超预算回滚、超过 10000 的安全整数排序位置往返、非法恢复、书签导入去重。
+集成测试直接调用与线上相同的 `functions/_lib/router.ts`（Workers 与 Pages 共用），并使用真实的 D1（含 `CHECK`/外键约束与事务语义），覆盖：初始化只能一次、并发登录/初始化/改密限流、会话哈希存储、被动读取不续期而显式活动续期、登出与改密撤销（含当前设备）、同源/协议/端口校验、请求体上限、未知字段与危险协议拒绝、分组迁移与级联删除、跨分组排序的原子性与陈旧版本回滚、无变更请求的陈旧版本拒绝、600+ 条链接的批量导入 / 恢复 / 排序在 SQL 预算内完成、300 分组 / 5000 链接的备份往返、接近内容预算边界的多字节 Unicode 导出/恢复往返与超预算回滚、超过 10000 的安全整数排序位置往返、非法恢复、书签导入去重，以及 Worker 适配层（精确 `/api` 与 `/api/*` 的 no-store JSON 404、未登录 401、非 API 请求委派给 `ASSETS`）。
 
 ---
 
@@ -276,8 +357,9 @@ npm run check:browser -- --init-secret <与 .dev.vars 一致的 INIT_SECRET>   #
 - **无文件上传**：壁纸与图标都通过 URL 引用，不提供 R2 或图片代理；跨域图片能否显示取决于对方的防盗链与 CORS 策略，加载失败时会回退为首字母图标。
 - **拖拽与触屏**：分组与链接的 HTML5 拖放主要面向鼠标；触屏与键盘用户请使用分组的上移/下移按钮、卡片的上移/下移/编辑（编辑弹窗中可切换分组）按钮，功能完全等价。
 - **容量上限**：最多 300 个分组、5000 条链接；全部内容（分组 + 链接 + 设置）的紧凑 JSON 总量上限 10 MiB，单次备份恢复 / 导入请求体积上限 20 MiB。超限的导入 / 恢复会在事务内被拒绝并回滚，不会出现超预算数据或半截写入；由于 10 MiB 内容加 pretty 导出空白仍远低于 20 MiB，任何成功保存的内容都能被导出并再次恢复。
-- **compatibility date**：`wrangler.jsonc` 使用 2026-09-15（由 wrangler 捆绑的 workerd 提供）；vitest 测试池捆绑的 workerd 最高支持 2026-08-15，因此 `vitest.workers.config.ts` 单独使用后者，二者仅相差一个月，API 行为一致。
-- **`_worker.js` 说明**：`npm run build:functions` 只把编译结果输出到 `.tmp/`，不会写入 `dist/`，以免与 Pages 的 `functions/` 路由冲突。前端路由（`/admin`、`/login` 等）依赖 Pages 默认的 SPA 回退（项目没有 `404.html`，未命中的静态请求会返回 `index.html`），因此不再需要 `public/_redirects`；仓库中也没有该文件。`public/_headers` 为静态资源设置缓存与安全响应头。
+- **compatibility date**：`wrangler.jsonc`（Workers）与 `wrangler.pages.jsonc`（Pages）都使用 2026-09-15（由 wrangler 捆绑的 workerd 提供）；vitest 测试池捆绑的 workerd 最高支持 2026-08-15，因此 `vitest.workers.config.ts` 单独使用后者，二者仅相差一个月，API 行为一致。
+- **`_worker.js` 说明**：`npm run build:functions` 只把编译结果输出到 `.tmp/`，不会写入 `dist/`，以免与 Pages 的 `functions/` 路由冲突。前端路由（`/admin`、`/login` 等）依赖 SPA 回退（Pages 未命中静态请求时返回 `index.html`；Workers 由 `assets.not_found_handling = "single-page-application"` 提供同样的行为），因此不再需要 `public/_redirects`；仓库中也没有该文件。`public/_headers` 为静态资源设置缓存与安全响应头；`public/_routes.json` 只用于 Pages Functions 的调用范围。
+- **两套部署形态**：Workers 入口 `worker/index.ts` 与 Pages 入口 `functions/api/[[path]].ts` 复用同一份 `functions/_lib` 路由与 D1 迁移，接口行为一致。Pages 命令不支持 `--config`，因此 `wrangler.pages.jsonc` 不会被 `wrangler pages dev/deploy` 直接读取；它用于 Pages Git 集成（方式 B：构建时覆盖到根目录）以及作为 Pages 项目配置的版本化声明（D1 迁移命令例外，可用 `--config wrangler.pages.jsonc`，见 3.3）。
 - **会话顺延范围**：滑动过期没有绝对上限，只要在 7 天内持续有真实操作即可保持登录；改密会撤销全部旧会话。
 - **时区**：时钟与日期使用浏览器本地时区；数据库时间戳统一为 UTC ISO 字符串。
 - **开发依赖公告**：`npm audit` 会报告 `miniflare` / `wrangler` 传递依赖中 `sharp` 的高危公告。它们只用于本地测试与构建，不会进入部署产物；官方建议的修复方式需要把 `@cloudflare/vitest-pool-workers` 降级到 0.8.x（破坏性变更，会连带降低 Vitest 版本），因此当前保留现有版本并在升级后重新评估。

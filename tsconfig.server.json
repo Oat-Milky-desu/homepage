@@ -7,5 +7,5 @@
     "noUnusedParameters": true,
     "baseUrl": "."
   },
-  "include": ["functions/**/*.ts", "src/shared/**/*.ts", "tests/api/**/*.ts"]
+  "include": ["functions/**/*.ts", "worker/**/*.ts", "src/shared/**/*.ts", "tests/api/**/*.ts"]
 }

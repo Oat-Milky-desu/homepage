@@ -1,0 +1,23 @@
+{
+  // Cloudflare Pages 专用配置：供 Pages Git 集成（方式 B：构建时覆盖到根目录）与 Pages 项目配置声明使用。
+  // 注意：`wrangler pages dev/deploy` 不接受 --config，本地 Pages 预览依然读取根目录 wrangler.jsonc；
+  // 但 D1 迁移命令支持 --config，可用：
+  //   npx wrangler d1 migrations apply DB --remote --config wrangler.pages.jsonc
+  // Workers（Deploy to Cloudflare 按钮）配置见仓库根目录的 wrangler.jsonc。
+  // 两套配置共享同一份 D1 绑定与 migrations/ 目录；部署前把下面的 database_id 替换为真实 ID。
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xingyu-nav",
+  // 与已安装 workerd 支持的 compatibility date 保持一致
+  "compatibility_date": "2026-09-15",
+  "pages_build_output_dir": "dist",
+  // D1 数据库绑定：本地开发自动使用 .wrangler/state 下的 SQLite。
+  // 部署前执行 `npx wrangler d1 create xingyu-nav`，并把 database_id 替换为真实 ID。
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "xingyu-nav",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

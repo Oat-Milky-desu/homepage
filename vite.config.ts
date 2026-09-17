@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // 本地开发：/api 代理到 wrangler pages dev（约 8788 端口）
+    // 本地开发：/api 代理到 wrangler pages dev 或 wrangler dev（均监听 8788 端口）
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8788',

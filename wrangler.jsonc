@@ -1,12 +1,22 @@
 {
-  // Cloudflare Pages 项目配置（单一配置来源，不再保留 wrangler.toml）
+  // Cloudflare Workers 配置：Deploy to Cloudflare 按钮与 `wrangler deploy` 使用。
+  // Pages 专用配置见 wrangler.pages.jsonc（两套配置共享 D1 绑定与 migrations/）。
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "xingyu-nav",
+  "main": "worker/index.ts",
   // 与已安装 workerd 支持的 compatibility date 保持一致
   "compatibility_date": "2026-09-15",
-  "pages_build_output_dir": "dist",
+  // Vite 构建产物作为静态资源；/api 与 /api/* 优先交给 Worker（避免 SPA 回退吞掉接口 404），
+  // 其余请求由静态资源处理，未命中的导航请求回退到 index.html。
+  "assets": {
+    "directory": "dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api", "/api/*"]
+  },
   // D1 数据库绑定：本地开发自动使用 .wrangler/state 下的 SQLite。
-  // 部署前执行 `npx wrangler d1 create xingyu-nav`，并把 database_id 替换为真实 ID。
+  // Deploy to Cloudflare 按钮会自动创建数据库并把真实 database_id 回填到克隆仓库；
+  // 手动部署时执行 `npx wrangler d1 create xingyu-nav` 并替换下面的占位 ID。
   "d1_databases": [
     {
       "binding": "DB",
